@@ -5,7 +5,7 @@
   const FILES = {
     move: ['move1', 'move2', 'move3'], capture: ['capture1', 'capture2'], select: ['select'], check: ['check'],
     illegal: ['illegal'], win: ['win'], lose: ['lose'], draw: ['draw'], solved: ['solved'], start: ['start'],
-    tick: ['tick'], click: ['click'], promote: ['promote'], energy: ['energy'],
+    tick: ['tick'], click: ['click'], promote: ['promote'], energy: ['energy'], achieve: ['achieve'],
   };
   // 技能音效（Kenney Sci-Fi / Impact / Interface Sounds）
   ['chain', 'cicada', 'swap', 'boats', 'fort', 'knife', 'spy', 'arrows', 'fire', 'stones', 'thunder', 'shield', 'freeze', 'portal', 'rage', 'snipe', 'phoenix']

@@ -1,5 +1,5 @@
 /* 離線快取（由 tools/build.js 產生，請勿手動修改）。 */
-const VERSION = 'xq-8c70430f';
+const VERSION = 'xq-07504307';
 const PRECACHE = [
  "./",
  "index.html",
@@ -13,6 +13,7 @@ const PRECACHE = [
  "js/audio.js",
  "js/board.js",
  "js/app.js",
+ "assets/sounds/achieve.mp3",
  "assets/sounds/capture1.mp3",
  "assets/sounds/capture2.mp3",
  "assets/sounds/check.mp3",

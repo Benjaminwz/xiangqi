@@ -9,10 +9,14 @@
     paper: { tex: null, base: '#f0e5ca', base2: '#e6d6b2', line: '#2c2620', text: '#3b3028', mark: '#2c2620', shade: 0.1, noise: true },
     jade: { tex: null, base: '#c3dccb', base2: '#93bfa6', line: '#1f4a3a', text: '#1f4a3a', mark: '#1f4a3a', shade: 0.14, noise: true },
     ink: { tex: null, base: '#262b30', base2: '#1a1e22', line: '#cdb98a', text: '#cdb98a', mark: '#cdb98a', shade: 0.25, noise: true },
+    marble: { tex: null, base: '#f1eee8', base2: '#d9d4cb', line: '#3b352f', text: '#3b352f', mark: '#3b352f', shade: 0.12, veins: true },
+    porcelain: { tex: null, base: '#f7f9fc', base2: '#e1e8f3', line: '#1f3d8c', text: '#1f3d8c', mark: '#1f3d8c', shade: 0.1, crackle: true },
   };
   const PIECE_SETS = {
     wood: { kind: 'carved' },
     ivory: { kind: 'flat' },
+    jade: { kind: 'jade' },
+    lacquer: { kind: 'lacquer' },
     classic: { kind: 'image', dir: 'assets/pieces/classic/' },
     trad: { kind: 'image', dir: 'assets/pieces/trad/' },
   };
@@ -235,6 +239,42 @@
           g.fillRect(rnd() * W, rnd() * H, 1 + rnd() * 1.5, 1 + rnd() * 1.5);
         }
       }
+      if (th.veins || th.crackle) {
+        // 大理石紋路／青花瓷開片：固定種子，每次畫出來都一樣
+        let sd = th.veins ? 23 : 57;
+        const rnd = () => { sd = (sd * 16807) % 2147483647; return sd / 2147483647; };
+        g.save();
+        g.lineCap = 'round';
+        if (th.veins) {
+          for (let i = 0; i < 9; i++) {
+            let x = rnd() * W, y = rnd() * H, a = rnd() * Math.PI * 2;
+            const len = 18 + rnd() * 30, wide = rnd() < 0.3;
+            g.strokeStyle = wide ? 'rgba(150,135,115,0.22)' : 'rgba(110,104,96,0.28)';
+            g.lineWidth = wide ? 2.5 + rnd() * 3 : 0.6 + rnd() * 1.2;
+            g.beginPath(); g.moveTo(x, y);
+            for (let k = 0; k < len; k++) { a += (rnd() - 0.5) * 0.7; x += Math.cos(a) * s * 0.35; y += Math.sin(a) * s * 0.35; g.lineTo(x, y); }
+            g.stroke();
+          }
+          for (let i = 0; i < 260; i++) { g.fillStyle = 'rgba(120,110,100,' + (0.03 + rnd() * 0.05) + ')'; g.beginPath(); g.arc(rnd() * W, rnd() * H, 0.5 + rnd() * 1.6, 0, Math.PI * 2); g.fill(); }
+        } else {
+          g.strokeStyle = 'rgba(70,90,130,0.13)'; g.lineWidth = 0.8;
+          for (let i = 0; i < 70; i++) {
+            let x = rnd() * W, y = rnd() * H;
+            g.beginPath(); g.moveTo(x, y);
+            for (let k = 0; k < 4; k++) { x += (rnd() - 0.5) * s * 1.4; y += (rnd() - 0.5) * s * 1.4; g.lineTo(x, y); }
+            g.stroke();
+          }
+          // 四角的回紋
+          g.strokeStyle = 'rgba(31,61,140,0.55)'; g.lineWidth = Math.max(1, s * 0.035);
+          const m = s * 0.22, L = s * 0.5;
+          for (const [cx2, cy2, dx, dy] of [[m, m, 1, 1], [W - m, m, -1, 1], [m, H - m, 1, -1], [W - m, H - m, -1, -1]]) {
+            g.beginPath(); g.moveTo(cx2 + dx * L, cy2); g.lineTo(cx2, cy2); g.lineTo(cx2, cy2 + dy * L);
+            g.moveTo(cx2 + dx * L * 0.6, cy2 + dy * L * 0.25); g.lineTo(cx2 + dx * L * 0.25, cy2 + dy * L * 0.25); g.lineTo(cx2 + dx * L * 0.25, cy2 + dy * L * 0.6);
+            g.stroke();
+          }
+        }
+        g.restore();
+      }
       const vg = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.25, W / 2, H / 2, Math.max(W, H) * 0.72);
       vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,' + th.shade + ')');
       g.fillStyle = vg; g.fillRect(0, 0, W, H);
@@ -390,8 +430,8 @@
       g.scale(dpr, dpr);
       const cx = size / 2, cy = size / 2;
       const red = pc < 8;
-      const ink = red ? RED_INK : BLACK_INK;
       const set = PIECE_SETS[this.pieceSet];
+      const ink = set.kind === 'jade' ? (red ? '#9c1813' : '#0d2a1c') : set.kind === 'lacquer' ? (red ? '#ff5b3d' : '#ecc96f') : (red ? RED_INK : BLACK_INK);
       const ch = CHARS[this.lang][pc];
       // 陰影
       g.save();
@@ -410,7 +450,33 @@
           return { c, size };
         }
       }
-      if (set.kind === 'flat') {
+      if (set.kind === 'jade') {
+        g.save();
+        g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2); g.clip();
+        const rg = g.createRadialGradient(cx - R * 0.32, cy - R * 0.38, R * 0.08, cx, cy, R * 1.05);
+        rg.addColorStop(0, '#e2f5e6'); rg.addColorStop(0.42, '#86c9a0'); rg.addColorStop(1, '#2d7650');
+        g.fillStyle = rg; g.fillRect(cx - R, cy - R, 2 * R, 2 * R);
+        let sd = 101 + (pc & 7) * 13;
+        const rnd = () => { sd = (sd * 16807) % 2147483647; return sd / 2147483647; };
+        for (let i = 0; i < 14; i++) { g.fillStyle = 'rgba(255,255,255,' + (0.06 + rnd() * 0.1) + ')'; g.beginPath(); g.ellipse(cx + (rnd() - 0.5) * 1.6 * R, cy + (rnd() - 0.5) * 1.6 * R, R * (0.1 + rnd() * 0.25), R * (0.04 + rnd() * 0.08), rnd() * 3, 0, Math.PI * 2); g.fill(); }
+        g.restore();
+        g.lineWidth = Math.max(1, R * 0.05); g.strokeStyle = 'rgba(16,60,38,0.6)';
+        g.beginPath(); g.arc(cx, cy, R - g.lineWidth / 2, 0, Math.PI * 2); g.stroke();
+        g.strokeStyle = 'rgba(240,255,245,0.6)';
+        g.beginPath(); g.arc(cx, cy, R * 0.8, 0, Math.PI * 2); g.stroke();
+      } else if (set.kind === 'lacquer') {
+        g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2);
+        const rg = g.createRadialGradient(cx - R * 0.3, cy - R * 0.4, R * 0.05, cx, cy, R);
+        rg.addColorStop(0, '#4a271b'); rg.addColorStop(0.55, '#1e0d08'); rg.addColorStop(1, '#0c0403');
+        g.fillStyle = rg; g.fill();
+        g.lineWidth = Math.max(1.2, R * 0.08); g.strokeStyle = '#d1a64e';
+        g.beginPath(); g.arc(cx, cy, R * 0.86, 0, Math.PI * 2); g.stroke();
+        g.lineWidth = Math.max(0.8, R * 0.025); g.strokeStyle = 'rgba(232,196,110,0.7)';
+        g.beginPath(); g.arc(cx, cy, R * 0.74, 0, Math.PI * 2); g.stroke();
+        const hl = g.createLinearGradient(0, cy - R, 0, cy);
+        hl.addColorStop(0, 'rgba(255,255,255,0.18)'); hl.addColorStop(1, 'rgba(255,255,255,0)');
+        g.fillStyle = hl; g.beginPath(); g.ellipse(cx, cy - R * 0.45, R * 0.7, R * 0.4, 0, 0, Math.PI * 2); g.fill();
+      } else if (set.kind === 'flat') {
         g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2);
         const lg = g.createLinearGradient(0, cy - R, 0, cy + R);
         lg.addColorStop(0, '#fbf6ea'); lg.addColorStop(1, '#e9dcc0');
@@ -463,11 +529,14 @@
       const m = g.measureText(ch);
       const asc = m.actualBoundingBoxAscent || fs * 0.8, desc = m.actualBoundingBoxDescent || fs * 0.12;
       const ty = cy + (asc - desc) / 2;
-      if (set.kind !== 'flat') {
-        g.fillStyle = 'rgba(255,250,236,0.7)';
+      if (set.kind === 'carved' || set.kind === 'jade') {
+        g.fillStyle = set.kind === 'jade' ? 'rgba(235,255,240,0.55)' : 'rgba(255,250,236,0.7)';
         g.fillText(ch, cx + 0.7, ty + 1);
         g.fillStyle = 'rgba(40,20,5,0.35)';
         g.fillText(ch, cx - 0.5, ty - 0.6);
+      } else if (set.kind === 'lacquer') {
+        g.fillStyle = 'rgba(0,0,0,0.6)';
+        g.fillText(ch, cx + 0.6, ty + 0.9);
       }
       g.fillStyle = ink;
       g.fillText(ch, cx, ty);

@@ -274,7 +274,7 @@
       moves: [], boards: [variant ? pos.viewBoard() : Int8Array.from(pos.board)], fx: [variant ? pos.effects() : null], keys: [pos.key + ':' + pos.lock], sides: [pos.side],
       viewPly: 0, result: null, players: o.players || playersFor(o), humanSide: o.humanSide == null ? RED : o.humanSide,
       tc: o.tc || 'none', handicap: o.handicap || 'none', clock: null, undos: o.undos || 0, hints: o.hints || 0,
-      opening: null, puzzle: o.puzzle || null, headers: o.headers || {}, thinking: -1, saved: false,
+      opening: null, puzzle: o.puzzle || null, daily: o.daily || null, headers: o.headers || {}, thinking: -1, saved: false,
     };
     const tc = TCS.find(x => x.key === g.tc);
     if (tc && tc.base) g.clock = { base: tc.base, inc: tc.inc, remain: [tc.base, tc.base], running: -1, stamp: 0, warned: [false, false] };
@@ -394,6 +394,7 @@
     if (g.clock && g.clock.running === g.pos.side) { tickClock(); if (g.result) return false; g.clock.remain[g.pos.side] += g.clock.inc; }
     const rec = applyMove(mv);
     if (!rec) { A.play('illegal'); return false; }
+    if (source === 'human' && (g.mode === 'pvc' || g.mode === 'pvp')) achOnMove(g, rec);
     if (g.mode === 'review') g.mode = 'analysis';
     g.viewPly = g.moves.length;
     selected = -1; hintArrow = null; skillState = null;
@@ -528,11 +529,129 @@
     }
     let ratingChange = null;
     if (g.mode === 'pvc' && !g.statsDone) { ratingChange = isVar(g) ? recordVariantStats(g) : recordStats(g); g.statsDone = true; }
-    if (g.mode === 'puzzle' && r.winner === RED && g.puzzle) { stats.puzzles[g.puzzle.id] = true; Store.set('stats', stats); }
+    if (!g.achDone && (g.mode === 'pvc' || g.mode === 'pvp')) { g.achDone = true; achOnGameOver(g); }
+    if (g.mode === 'puzzle' && r.winner === RED && g.puzzle && !g.demoSolution) {
+      stats.puzzles[g.puzzle.id] = true; Store.set('stats', stats);
+      const solved = Object.keys(stats.puzzles).filter(k => stats.puzzles[k]).length;
+      if (solved >= 10) unlock('pz10');
+      if (solved >= PUZZLES.length) unlock('pzAll');
+      if (g.daily) recordDaily(g.daily);
+    }
     if (g.mode !== 'puzzle' && g.moves.length) saveToLibrary(g, true);
     persist();
     setTimeout(() => { if (game === g) showResultDialog(ratingChange); }, 1500);
   }
+  // ================================================================== 成就、每日一題
+  const ACH_LIST = [
+    ['firstWin', 'classic'], ['beatAdvanced', 'classic'], ['beatMaster', 'classic'], ['beatGM', 'classic'], ['streak3', 'classic'], ['cleanWin', 'classic'],
+    ['fastMate', 'classic'], ['rating1500', 'classic'], ['rating1800', 'classic'], ['games10', 'classic'], ['games50', 'classic'], ['pvp', 'classic'], ['review', 'classic'],
+    ['pz10', 'puzzle'], ['pzAll', 'puzzle'], ['daily3', 'puzzle'], ['daily7', 'puzzle'],
+    ['cvxXq', 'variant'], ['cvxChess', 'variant'], ['cvxFull', 'variant'], ['promote', 'variant'], ['skillFirst', 'variant'], ['skillAll', 'variant'], ['skillMate', 'variant'], ['chainDouble', 'variant'],
+  ];
+  const achCount = () => ACH_LIST.filter(([id]) => stats.ach && stats.ach[id]).length;
+  function unlock(id) {
+    if (!stats.ach) stats.ach = {};
+    if (stats.ach[id]) return;
+    stats.ach[id] = Date.now();
+    Store.set('stats', stats);
+    setTimeout(() => {
+      const el = document.createElement('div');
+      el.className = 'toast ach';
+      el.innerHTML = '<svg class="sk-ic" aria-hidden="true"><use href="#sk-trophy"/></svg><span>' + esc(t('ach.unlocked', { name: t('ach.' + id) })) + '</span>';
+      ui.toastRoot.appendChild(el);
+      while (ui.toastRoot.children.length > 3) ui.toastRoot.firstChild.remove();
+      setTimeout(() => el.remove(), 3800);
+      A.play('achieve');
+    }, 1100);
+  }
+  function achOnGameOver(g) {
+    const r = g.result;
+    if (!r) return;
+    if (g.mode === 'pvp' && g.moves.length >= 10) unlock('pvp');
+    if (g.mode !== 'pvc') return;
+    stats.played = (stats.played || 0) + 1;
+    Store.set('stats', stats);
+    if (stats.played >= 10) unlock('games10');
+    if (stats.played >= 50) unlock('games50');
+    if (r.winner !== g.humanSide) return;
+    const lv = g.players[g.humanSide ^ 1].level;
+    unlock('firstWin');
+    if (lv >= 3) unlock('beatAdvanced');
+    if (lv >= 4) unlock('beatMaster');
+    if (lv >= 5) unlock('beatGM');
+    if (lv >= 2 && !g.undos && !g.hints) unlock('cleanWin');
+    if (r.reason === 'mate' && g.moves.filter(m => m.side === g.humanSide).length <= 30) unlock('fastMate');
+    if (!isVar(g)) {
+      if (stats.streak >= 3) unlock('streak3');
+      if (stats.rating >= 1500) unlock('rating1500');
+      if (stats.rating >= 1800) unlock('rating1800');
+      return;
+    }
+    const army = g.variant.armies[g.humanSide];
+    if (g.variant.kind === 'cvx') { unlock(army === 'chess' ? 'cvxChess' : 'cvxXq'); if (army === 'xq' && g.variant.queen) unlock('cvxFull'); }
+    const last = g.moves[g.moves.length - 1];
+    if (r.reason === 'mate' && last && last.skill && last.side === g.humanSide) unlock('skillMate');
+  }
+  function achOnMove(g, rec) {
+    if (!isVar(g)) return;
+    if (rec.skill) {
+      const used = stats.skillsUsed || (stats.skillsUsed = {});
+      const key = VXE.SKILLS[rec.skill].key;
+      used[key] = (used[key] || 0) + 1;
+      Store.set('stats', stats);
+      unlock('skillFirst');
+      if (SKILL_KEYS.every(k => used[k])) unlock('skillAll');
+      return;
+    }
+    if ((rec.mv >> 14) & 7) unlock('promote');
+    if (rec.cap) {
+      // 連環計：從發動那一手起，同一回合吃了兩顆子
+      let i = g.moves.length - 1, caps = 0;
+      while (i >= 0 && g.moves[i].side === rec.side && !g.moves[i].skill) { if (g.moves[i].cap) caps++; i--; }
+      if (caps >= 2 && i >= 0 && g.moves[i].side === rec.side && VXE.SKILLS[g.moves[i].skill] && VXE.SKILLS[g.moves[i].skill].key === 'chain') unlock('chainDouble');
+    }
+  }
+  const dayKey = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  const todayKey = () => dayKey(new Date());
+  const yesterdayKey = () => { const d = new Date(); d.setDate(d.getDate() - 1); return dayKey(d); };
+  function dailyPuzzle(key) {
+    let h = 2166136261;
+    for (const c of (key || todayKey())) h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
+    return PUZZLES[h % PUZZLES.length];
+  }
+  function dailyStreak() {
+    const D = stats.daily || {};
+    return D.last === todayKey() || D.last === yesterdayKey() ? (D.streak || 0) : 0;
+  }
+  function recordDaily(key) {
+    const D = stats.daily || (stats.daily = { last: null, streak: 0, best: 0, total: 0 });
+    if (D.last === key) return;
+    const y = new Date(key + 'T12:00:00'); y.setDate(y.getDate() - 1);
+    D.streak = D.last === dayKey(y) ? D.streak + 1 : 1;
+    D.best = Math.max(D.best || 0, D.streak); D.total = (D.total || 0) + 1; D.last = key;
+    Store.set('stats', stats);
+    setTimeout(() => toast(t('daily.done', { s: D.streak }), 'good'), 1800);
+    if (D.streak >= 3) unlock('daily3');
+    if (D.streak >= 7) unlock('daily7');
+  }
+  function startDaily() {
+    const key = todayKey(), p = dailyPuzzle(key);
+    if ((stats.daily || {}).last === key) setTimeout(() => toast(t('daily.again')), 400);
+    startPuzzle(p, { daily: key });
+  }
+  function achievementsDialog() {
+    const got = stats.ach || {};
+    const n = achCount();
+    const fmtDate = ts => new Date(ts).toLocaleDateString(S.lang === 'en' ? 'en' : S.lang);
+    const html = '<p class="field-hint" style="margin-top:0">' + esc(t('ach.progress', { a: n, b: ACH_LIST.length })) + '</p><div class="progress"><i style="width:' + Math.round(n / ACH_LIST.length * 100) + '%"></i></div>' +
+      [['classic', 'ach.g.classic'], ['puzzle', 'ach.g.puzzle'], ['variant', 'ach.g.variant']].map(([grp, label]) => '<h3 class="sk-group">' + esc(t(label)) + '</h3><div class="sk-grid">' +
+        ACH_LIST.filter(a => a[1] === grp).map(([id]) => {
+          const at = got[id];
+          return '<div class="sk-entry ach-entry' + (at ? ' on' : '') + '"><svg class="sk-ic big" aria-hidden="true"><use href="#' + (at ? 'sk-trophy' : 'sk-medal') + '"/></svg><span class="sk-body"><b>' + esc(t('ach.' + id)) + '</b><span class="sk-desc">' + esc(t('ach.' + id + '.d')) + '</span><small class="sk-meta">' + esc(at ? t('ach.when', { date: fmtDate(at) }) : t('ach.locked')) + '</small></span></div>';
+        }).join('') + '</div>').join('');
+    openModal({ title: t('ach.title'), body: html, wide: true });
+  }
+
   function recordVariantStats(g) {
     const r = g.result, key = g.variant.kind;
     const V = stats.variants || (stats.variants = {});
@@ -961,14 +1080,15 @@
     const redMoves = g.moves.filter(m => m.side === RED).length;
     if (redMoves >= pz.n) setResult(BLACK, 'puzzleFail', { loser: RED });
   }
-  function startPuzzle(p) {
+  function startPuzzle(p, opts) {
     const idx = PUZZLES.indexOf(p);
     const sameN = PUZZLES.filter(x => x.n === p.n);
     p.label = t('pz.label', { n: p.n, i: sameN.indexOf(p) + 1 });
     p.index = idx;
-    startGame({ mode: 'puzzle', fen: p.fen, humanSide: RED, puzzle: p });
+    startGame({ mode: 'puzzle', fen: p.fen, humanSide: RED, puzzle: p, daily: opts && opts.daily });
     toast(t('status.puzzleGoal', { n: p.n }));
   }
+  const puzzleTitle = g => (g.daily ? t('daily.label', { date: g.daily.slice(5).replace('-', '/') }) : g.puzzle.label);
   function nextPuzzle() {
     const g = game;
     const cur = g && g.puzzle ? g.puzzle.index : -1;
@@ -982,6 +1102,7 @@
     const p = g.puzzle;
     startGame({ mode: 'puzzle', fen: p.fen, humanSide: RED, puzzle: p, silent: true });
     game.hints += 3;
+    game.demoSolution = true;
     const sol = p.sol.slice();
     let i = 0;
     stopAi();
@@ -1116,6 +1237,7 @@
     } catch (e) { if (reviewData) reviewData.running = false; renderReview(); return; }
     if (!reviewData || reviewData.id !== g.id) return;
     reviewData.running = false;
+    unlock('review');
     classifyMoves();
     renderReview();
     renderMoveList();
@@ -1230,7 +1352,7 @@
     if (editState) s = t('mode.edit');
     else if (g.mode === 'pvc') s += ' · ' + t('level.' + LEVELS[g.players[g.humanSide ^ 1].level].key);
     else if (g.mode === 'cvc') s += ' · ' + t('level.' + LEVELS[g.players[0].level].key) + ' vs ' + t('level.' + LEVELS[g.players[1].level].key);
-    else if (g.mode === 'puzzle' && g.puzzle) s = g.puzzle.label || s;
+    else if (g.mode === 'puzzle' && g.puzzle) s = puzzleTitle(g) || s;
     if (g.handicap && g.handicap !== 'none') s += ' · ' + t('hc.' + g.handicap);
     ui.modeLabel.textContent = s;
   }
@@ -1591,6 +1713,13 @@
     const side = g.mode === 'pvc' ? g.humanSide : pos.side;
     const myTurn = atLive() && !g.result && pos.side === side && g.players[side].type === 'human' && g.thinking < 0;
     bar.classList.toggle('waiting', !myTurn);
+    // 有技能剛變成可以發動時，提示音加上發光
+    const readyNow = pos.deck[side].filter(id => { const info = pos.skillInfo(side, id); return !info.used && !info.cdLeft && info.energy >= VXE.SKILLS[id].cost; });
+    const rkey = g.id + ':' + side;
+    const prevReady = bar._ready && bar._ready.key === rkey ? bar._ready.ids : null;
+    const fresh = myTurn && prevReady ? readyNow.filter(id => prevReady.indexOf(id) < 0) : [];
+    if (atLive()) bar._ready = { key: rkey, ids: readyNow };
+    if (fresh.length && g.mode === 'pvc') A.play('energy');
     bar.innerHTML = '<div class="sk-head"><span class="side-dot ' + (side === RED ? 'red' : 'black') + '"></span><span class="sk-who">' + esc(g.mode === 'pvc' ? t('player.you') : sideName(side)) + '</span>' + energyHtml(pos.en[side]) +
       '<button class="icon-btn sk-info" data-act="skills" aria-label="' + esc(t('sk.book')) + '" title="' + esc(t('sk.book')) + '"><svg class="ic"><use href="#i-info"/></svg></button></div>' +
       '<div class="sk-cards">' + pos.deck[side].map(id => {
@@ -1598,7 +1727,7 @@
         const state = info.used ? 'used' : info.cdLeft ? 'cd' : info.energy < sk.cost ? 'poor' : 'ready';
         const armed = skillState && skillState.id === id;
         const off = !myTurn || pos.extra > 0 || state !== 'ready';
-        return '<button type="button" class="sk-card ' + state + (armed ? ' armed' : '') + (off ? ' off' : '') + '" data-skill="' + id + '" aria-label="' + esc(t('sk.' + sk.key + '.name') + '，' + t('sk.cost', { n: sk.cost })) + '">' +
+        return '<button type="button" class="sk-card ' + state + (armed ? ' armed' : '') + (off ? ' off' : '') + (fresh.indexOf(id) >= 0 ? ' just-ready' : '') + '" data-skill="' + id + '" title="' + esc(t('sk.' + sk.key + '.desc')) + '" aria-label="' + esc(t('sk.' + sk.key + '.name') + '，' + t('sk.cost', { n: sk.cost })) + '">' +
           skIcon(sk.key) + '<span class="sk-name">' + esc(t('sk.' + sk.key + '.name')) + '</span><span class="sk-cost">' + sk.cost + '</span>' +
           (info.used ? '<span class="sk-badge">' + esc(t('sk.used')) + '</span>' : info.cdLeft ? '<span class="sk-badge">' + info.cdLeft + '</span>' : '') + '</button>';
       }).join('') + '</div>';
@@ -1658,6 +1787,29 @@
     });
   }
 
+  // ================================================================== 手機返回鍵
+  // 開對話框、選單、棋譜面板時推一筆歷史紀錄；按返回鍵就關掉最上層，而不是離開網頁
+  const overlays = [];
+  let ignorePop = 0;
+  function pushOverlay(closeFn) {
+    if (inFrame || !window.history || !history.pushState) return () => {};
+    const entry = { closeFn, active: true };
+    try { history.pushState({ xqOverlay: true }, ''); } catch (e) { return () => {}; }
+    overlays.push(entry);
+    return () => {
+      if (!entry.active) return;
+      entry.active = false;
+      const i = overlays.indexOf(entry); if (i >= 0) overlays.splice(i, 1);
+      ignorePop++;
+      try { history.back(); } catch (e) { ignorePop--; }
+    };
+  }
+  window.addEventListener('popstate', () => {
+    if (ignorePop > 0) { ignorePop--; return; }
+    const entry = overlays.pop();
+    if (entry && entry.active) { entry.active = false; entry.closeFn(); }
+  });
+
   // ================================================================== 對話框
   const modalStack = [];
   function openModal(o) {
@@ -1673,10 +1825,12 @@
     $('.modal-title', m).textContent = o.title || '';
     const body = $('.modal-body', m);
     if (typeof o.body === 'string') body.innerHTML = o.body; else if (o.body) body.appendChild(o.body);
+    let unhist = () => {};
     const close = val => {
       if (!wrap.parentNode) return;
       wrap.remove(); scrim.remove();
       const i = modalStack.indexOf(api); if (i >= 0) modalStack.splice(i, 1);
+      unhist();
       if (o.onClose) o.onClose(val);
     };
     const api = { el: m, body, close };
@@ -1698,6 +1852,7 @@
     document.body.appendChild(scrim);
     document.body.appendChild(wrap);
     modalStack.push(api);
+    unhist = pushOverlay(() => close());
     setTimeout(() => { const f = $('.btn.primary', m) || $('[data-close]', m); if (f && !o.noFocus) f.focus({ preventScroll: true }); }, 30);
     return api;
   }
@@ -1825,10 +1980,11 @@
     if (g.mode === 'puzzle') {
       const ok = r.winner === RED;
       openModal({
-        title: g.puzzle.label,
-        body: '<div class="result-hero"><div class="result-word' + (ok ? '' : ' black') + '">' + esc(ok ? t('banner.solved') : t('banner.failed')) + '</div><div class="result-reason">' + esc(ok ? t('pz.solved', { n: g.puzzle.n }) : t('pz.failed')) + '</div></div>',
+        title: puzzleTitle(g),
+        body: '<div class="result-hero"><div class="result-word' + (ok ? '' : ' black') + '">' + esc(ok ? t('banner.solved') : t('banner.failed')) + '</div><div class="result-reason">' + esc(ok ? t('pz.solved', { n: g.puzzle.n }) : t('pz.failed')) + '</div>' +
+          (ok && g.daily ? '<div class="result-stats"><span>' + esc(t('daily.done', { s: dailyStreak() })) + '</span></div>' : '') + '</div>',
         actions: ok ? [{ label: t('btn.close'), ghost: true }, { label: t('btn.next'), primary: true, onClick: nextPuzzle }]
-          : [{ label: t('btn.solution'), ghost: true, onClick: showSolution }, { label: t('btn.retry'), primary: true, onClick: () => startPuzzle(g.puzzle) }],
+          : [{ label: t('btn.solution'), ghost: true, onClick: showSolution }, { label: t('btn.retry'), primary: true, onClick: () => startPuzzle(g.puzzle, { daily: g.daily }) }],
       });
       return;
     }
@@ -2182,6 +2338,8 @@
       '<div class="stat"><b>' + w + ' / ' + d + ' / ' + l + '</b><span>' + esc(t('st.wdl')) + '</span></div>' +
       '<div class="stat"><b>' + s.bestStreak + '</b><span>' + esc(t('st.streak')) + '</span></div>' +
       '<div class="stat"><b>' + solved + '/' + PUZZLES.length + '</b><span>' + esc(t('st.puzzles')) + '</span></div>' +
+      '<div class="stat"><b>' + dailyStreak() + ' / ' + ((s.daily || {}).best || 0) + '</b><span>' + esc(t('st.daily')) + '</span></div>' +
+      '<div class="stat"><b>' + achCount() + '/' + ACH_LIST.length + '</b><span>' + esc(t('menu.achievements')) + '</span></div>' +
       '</div><h3 style="font:700 15px/1.3 var(--font-display);margin:0 0 6px">' + esc(t('st.byLevel')) + '</h3><div class="tbl-wrap"><table class="tbl"><thead><tr><th>' + esc(t('st.level')) + '</th><th>' + esc(t('st.wins')) + '</th><th>' + esc(t('st.draws')) + '</th><th>' + esc(t('st.losses')) + '</th><th>' + esc(t('st.winRate')) + '</th></tr></thead><tbody>' +
       LEVELS.map(lv => { const x = s.levels[lv.key] || { w: 0, d: 0, l: 0 }; const n = x.w + x.d + x.l; return '<tr><td>' + esc(t('level.' + lv.key)) + '</td><td>' + x.w + '</td><td>' + x.d + '</td><td>' + x.l + '</td><td>' + (n ? Math.round((x.w + x.d * 0.5) / n * 100) + '%' : '—') + '</td></tr>'; }).join('') +
       '</tbody></table></div>' +
@@ -2369,8 +2527,13 @@
     const d = ui.drawerTpl.content.firstElementChild.cloneNode(true);
     applyI18n(d);
     $$('[data-count]', d).forEach(el => { el.textContent = t(el.dataset.count, { n: PUZZLES.length }); });
+    const doneToday = (stats.daily || {}).last === todayKey();
+    $$('[data-daily-sub]', d).forEach(el => { el.textContent = doneToday ? t('daily.subDone', { s: dailyStreak() }) : t('daily.sub', { n: dailyPuzzle().n, s: dailyStreak() }); });
+    $$('[data-ach-sub]', d).forEach(el => { el.textContent = t('ach.sub', { a: achCount(), b: ACH_LIST.length }); });
     if (inFrame) $$('[data-menu=install]', d).forEach(el => { el.hidden = true; });
-    const close = () => { d.remove(); scrim.remove(); };
+    let unhist = () => {};
+    const close = () => { d.remove(); scrim.remove(); unhist(); };
+    unhist = pushOverlay(close);
     scrim.onclick = close;
     d.addEventListener('click', e => {
       const b = e.target.closest('[data-menu]');
@@ -2390,6 +2553,8 @@
     else if (k === 'puzzles') puzzlesDialog();
     else if (k === 'analysis') { startGame({ mode: 'analysis', fen: game && !isVar(game) ? positionAt(game.viewPly).toFen() : XQ.START_FEN, silent: true, flip: board.flipped }); analysisOn = true; maybeAnalyze(); openLedger('analysis'); }
     else if (k === 'skills') skillsDialog();
+    else if (k === 'daily') startDaily();
+    else if (k === 'achievements') achievementsDialog();
     else if (k === 'edit') enterEditor(true);
     else if (k === 'import') importDialog();
     else if (k === 'export') exportDialog();
@@ -2404,6 +2569,7 @@
   function openLedger(tab) {
     if (tab) showTab(tab);
     if (!isMobile()) return;
+    const wasOpen = ui.ledger.classList.contains('open');
     ui.ledger.classList.add('open');
     if (!ui.ledgerScrim) {
       const s = document.createElement('div');
@@ -2413,11 +2579,13 @@
       document.body.appendChild(s);
       ui.ledgerScrim = s;
     }
+    if (!wasOpen) ui.ledgerUnhist = pushOverlay(closeLedger);
     renderMoveList();
   }
   function closeLedger() {
     ui.ledger.classList.remove('open');
     if (ui.ledgerScrim) { ui.ledgerScrim.remove(); ui.ledgerScrim = null; }
+    if (ui.ledgerUnhist) { const u = ui.ledgerUnhist; ui.ledgerUnhist = null; u(); }
   }
 
   // ================================================================== 存續
@@ -2426,7 +2594,7 @@
       v: 1, id: g.id, created: g.created, mode: g.mode, startFen: g.startFen, moves: g.moves.map(m => m.iccs), players: g.players,
       humanSide: g.humanSide, tc: g.tc, handicap: g.handicap, clockRemain: g.clock ? g.clock.remain.slice() : null, result: g.result,
       puzzle: g.puzzle ? g.puzzle.id : null, undos: g.undos, hints: g.hints, viewPly: g.viewPly, headers: g.headers, flip: board.flipped, statsDone: !!g.statsDone,
-      variant: g.variant || null,
+      variant: g.variant || null, daily: g.daily || null, achDone: !!g.achDone, demoSolution: !!g.demoSolution,
     };
   }
   function persist() { if (game && !game.demo) Store.set('current', serialize(game)); }
@@ -2436,8 +2604,9 @@
       const puzzle = d.puzzle ? PUZZLES.find(p => p.id === d.puzzle) : null;
       if (puzzle) { const sameN = PUZZLES.filter(x => x.n === puzzle.n); puzzle.label = t('pz.label', { n: puzzle.n, i: sameN.indexOf(puzzle) + 1 }); puzzle.index = PUZZLES.indexOf(puzzle); }
       if (d.variant && !VXE) return false;
-      startGame({ id: d.id, created: d.created, mode: d.mode, fen: d.startFen || undefined, variant: d.variant || null, moves: d.moves, players: d.players, humanSide: d.humanSide, tc: d.tc, handicap: d.handicap, result: d.result, clockRemain: d.clockRemain, puzzle, undos: d.undos, hints: d.hints, viewPly: d.viewPly, headers: d.headers, flip: d.flip, silent: true });
-      game.statsDone = !!d.statsDone;
+      startGame({ id: d.id, created: d.created, mode: d.mode, fen: d.startFen || undefined, variant: d.variant || null, moves: d.moves, players: d.players, humanSide: d.humanSide, tc: d.tc, handicap: d.handicap, result: d.result, clockRemain: d.clockRemain, puzzle, undos: d.undos, hints: d.hints, viewPly: d.viewPly, headers: d.headers, flip: d.flip, silent: true, daily: d.daily || null });
+      game.statsDone = !!d.statsDone; game.achDone = !!d.achDone; game.demoSolution = !!d.demoSolution;
+      renderModeLabel();
       return true;
     } catch (e) { console.warn('restore failed', e); return false; }
   }
