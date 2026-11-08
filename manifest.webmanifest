@@ -1,7 +1,7 @@
 {
   "name": "楚河漢界象棋",
   "short_name": "象棋",
-  "description": "象棋：經典六種難度、中西大戰（西洋棋 vs 象棋）、魔幻技能版、殺法練習、擺棋與全局分析。",
+  "description": "象棋：經典六種難度、鴉片戰爭（西洋棋 vs 象棋）、魔幻技能版、殺法練習、擺棋與全局分析。",
   "lang": "zh-Hant",
   "start_url": "./index.html",
   "scope": "./",

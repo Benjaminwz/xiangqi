@@ -34,7 +34,7 @@ const scripts = SCRIPTS.map(s => '<script src="' + s + '?v=' + ver + '"></script
 const fonts = '<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n' +
   '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@400;700&family=Noto+Serif+TC:wght@600;700&display=swap">';
 const TITLE = '楚河漢界象棋';
-const DESC = '可在電腦與手機（含 iPhone）上玩的象棋：經典象棋六種難度、中西大戰（西洋棋 vs 象棋）、魔幻技能版、殺法練習、擺棋、全局分析、棋譜匯入匯出。';
+const DESC = '可在電腦與手機（含 iPhone）上玩的象棋：經典象棋六種難度、鴉片戰爭（西洋棋 vs 象棋）、魔幻技能版、殺法練習、擺棋、全局分析、棋譜匯入匯出。';
 
 const standalone = '<!doctype html>\n<html lang="zh-Hant">\n<head>\n<meta charset="utf-8">\n' +
   '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n' +

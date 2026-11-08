@@ -1,4 +1,4 @@
-// 變體引擎測試：象棋規則 perft、中西大戰規則、技能、搜尋。執行：node tools/test-variant.js [selfplay N]
+// 變體引擎測試：象棋規則 perft、鴉片戰爭規則、技能、搜尋。執行：node tools/test-variant.js [selfplay N]
 'use strict';
 const VX = require('../js/variant.js');
 const XQ = require('../js/engine.js');
@@ -39,7 +39,7 @@ function perft(p, d) {
   }
   ok(same, 'random games: legal moves match classic engine');
 }
-// 3. 中西大戰開局
+// 3. 鴉片戰爭開局
 {
   const p = new VX.Position({ armies: ['xq', 'chess'] });
   const ms = p.legalMoves(false).length;

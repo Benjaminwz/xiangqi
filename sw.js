@@ -1,5 +1,5 @@
 /* 離線快取（由 tools/build.js 產生，請勿手動修改）。 */
-const VERSION = 'xq-07504307';
+const VERSION = 'xq-9c42f05f';
 const PRECACHE = [
  "./",
  "index.html",

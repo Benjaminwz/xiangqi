@@ -149,7 +149,7 @@
   const PIECE_VALUE = [0, 0, 2, 2, 4, 9, 4.5, 1];
   const START_COUNT = [0, 1, 2, 2, 2, 2, 2, 5];
 
-  // ================================================================== 中西大戰、魔幻技能（變體引擎 VX）
+  // ================================================================== 鴉片戰爭、魔幻技能（變體引擎 VX）
   const VXE = window.VX;
   const isVar = g => !!(g && g.variant);
   const SKILL_KEYS = VXE ? VXE.SKILLS.filter(Boolean).map(s => s.key) : [];
