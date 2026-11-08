@@ -1,0 +1,5 @@
+tools/out/
+dist/
+node_modules/
+*.log
+_artifact_test.html
