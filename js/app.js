@@ -2381,7 +2381,7 @@
     const iosNow = isIOS() && !isStandalone();
     const body = '<div class="help">' + (isStandalone() ? '<p class="install-now">' + esc(t('install.standalone')) + '</p>' : '') +
       (iosNow ? '<p class="install-now">' + share + ' ' + esc(t('install.iosNow')) + '</p>' : '') +
-      '<p>' + esc(t('install.intro')) + '</p><h3>iPhone / iPad</h3><p>' + esc(t('install.ios')) + '</p><h3>Android</h3><p>' + esc(t('install.android')) + '</p><h3>' + esc(t('install.pcT')) + '</h3><p>' + esc(t('install.pc')) + '</p></div>';
+      '<p>' + esc(t('install.intro')) + '</p><p>' + esc(t('install.offline')) + '</p><h3>iPhone / iPad</h3><p>' + esc(t('install.ios')) + '</p><h3>Android</h3><p>' + esc(t('install.android')) + '</p><h3>' + esc(t('install.pcT')) + '</h3><p>' + esc(t('install.pc')) + '</p></div>';
     openModal({ title: t('menu.install'), body });
   }
 
@@ -2738,6 +2738,12 @@
     if (hot && typeof hot.snapshot === 'function') { try { hot.snapshot(() => ({ current: game ? serialize(game) : null })); } catch (e) { /* ignore */ } }
     if ('serviceWorker' in navigator && location.protocol === 'https:' && !inFrame) {
       navigator.serviceWorker.register('sw.js').catch(() => {});
+      // 第一次存好離線檔案時提示；之後斷網、恢復連線也提示
+      navigator.serviceWorker.addEventListener('message', e => {
+        if (e.data && e.data.type === 'offline-ready' && !Store.get('offlineReady', false)) { Store.set('offlineReady', true); toast(t('offline.ready'), 'good'); }
+      });
+      window.addEventListener('offline', () => toast(t('offline.now')));
+      window.addEventListener('online', () => toast(t('offline.back'), 'good'));
     }
     window.XQApp = { get game() { return game; }, startGame, playMove, positionAt, board: () => board, settings: S, t };
   }

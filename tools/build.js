@@ -29,7 +29,7 @@ const wr = (p, s) => { fs.mkdirSync(path.dirname(path.join(root, p)), { recursiv
 const body = rd('src/body.html');
 const css = rd('css/app.css');
 const SCRIPTS = ['js/engine.js', 'js/variant.js', 'js/i18n.js', 'js/i18n-zhcn.js', 'js/puzzles.js', 'js/audio.js', 'js/board.js', 'js/app.js'];
-const ver = crypto.createHash('sha1').update(SCRIPTS.map(rd).join('') + css + body).digest('hex').slice(0, 8);
+const ver = crypto.createHash('sha1').update(SCRIPTS.map(rd).join('') + css + body + rd('src/sw.template.js')).digest('hex').slice(0, 8);
 const scripts = SCRIPTS.map(s => '<script src="' + s + '?v=' + ver + '"></script>').join('\n');
 const fonts = '<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n' +
   '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@400;700&family=Noto+Serif+TC:wght@600;700&display=swap">';
@@ -56,6 +56,6 @@ fs.writeFileSync(artifactOut, artifact);
 const list = ['./', 'index.html', 'css/app.css', 'manifest.webmanifest', ...SCRIPTS];
 const walk = d => fs.readdirSync(path.join(root, d), { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(d + '/' + e.name) : [d + '/' + e.name]);
 for (const d of ['assets/sounds', 'assets/textures', 'assets/fonts', 'assets/pieces', 'icons']) if (fs.existsSync(path.join(root, d))) list.push(...walk(d).filter(f => !/\.txt$/.test(f)));
-const sw = rd('src/sw.template.js').replace('__VERSION__', ver).replace('__PRECACHE__', JSON.stringify(list, null, 1));
+const sw = rd('src/sw.template.js').replace('__VERSION__', ver).replace('__PRECACHE__', JSON.stringify(list, null, 1)).replace('__MUSIC__', JSON.stringify(fs.existsSync(path.join(root, 'assets/music')) ? walk('assets/music') : []));
 wr('sw.js', sw);
 console.log('index.html、sw.js（' + list.length + ' 個檔案）與 ' + artifactOut + ' 已產生，版本 ' + ver);
