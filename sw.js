@@ -1,5 +1,5 @@
 /* 離線快取（由 tools/build.js 產生，請勿手動修改）。 */
-const VERSION = 'xq-f7cc97a9';
+const VERSION = 'xq-999922fd';
 const MUSIC = 'xq-music-v1';
 const PRECACHE = [
  "./",
@@ -124,6 +124,10 @@ async function cacheMusic() {
     }
   } catch (e) { /* 網路不穩時下次再存 */ }
 }
+// 頁面每次開啟都會請它補存（手機可能中途停掉背景下載）
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'cache-music') event.waitUntil(cacheMusic());
+});
 // <audio> 會用 Range 要部分內容，從快取切出對應的片段回傳
 async function rangeResponse(full, range) {
   const buf = await full.arrayBuffer();

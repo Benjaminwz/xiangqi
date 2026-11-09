@@ -2738,6 +2738,7 @@
     if (hot && typeof hot.snapshot === 'function') { try { hot.snapshot(() => ({ current: game ? serialize(game) : null })); } catch (e) { /* ignore */ } }
     if ('serviceWorker' in navigator && location.protocol === 'https:' && !inFrame) {
       navigator.serviceWorker.register('sw.js').catch(() => {});
+      navigator.serviceWorker.ready.then(reg => { if (reg.active) reg.active.postMessage({ type: 'cache-music' }); }).catch(() => {});
       // 第一次存好離線檔案時提示；之後斷網、恢復連線也提示
       navigator.serviceWorker.addEventListener('message', e => {
         if (e.data && e.data.type === 'offline-ready' && !Store.get('offlineReady', false)) { Store.set('offlineReady', true); toast(t('offline.ready'), 'good'); }

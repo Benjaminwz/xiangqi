@@ -25,6 +25,10 @@ async function cacheMusic() {
     }
   } catch (e) { /* 網路不穩時下次再存 */ }
 }
+// 頁面每次開啟都會請它補存（手機可能中途停掉背景下載）
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'cache-music') event.waitUntil(cacheMusic());
+});
 // <audio> 會用 Range 要部分內容，從快取切出對應的片段回傳
 async function rangeResponse(full, range) {
   const buf = await full.arrayBuffer();
